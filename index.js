@@ -18,20 +18,15 @@ const clients = new Map();
 
 // Telegram bot for sending codes
 const tgBot = process.env.TELEGRAM_BOT_TOKEN
-  ? new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, { polling: true })
+  ? new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, { polling: false })
   : null;
 
 // Map username -> chat_id (filled when user starts the bot)
 const tgUsers = new Map();
 
 if (tgBot) {
-  tgBot.on('message', (msg) => {
-    const username = msg.from?.username;
-    if (username) {
-      tgUsers.set(username.toLowerCase(), msg.chat.id);
-      console.log(`TG: registered @${username} -> ${msg.chat.id}`);
-    }
-  });
+  const webhookUrl = `https://swiftly-server-production-74db.up.railway.app/tg-webhook`;
+  tgBot.setWebHook(webhookUrl).then(() => console.log('Webhook set:', webhookUrl)).catch(console.error);
 }
 
 async function sendTelegramCode(username, code) {
@@ -46,6 +41,22 @@ async function sendTelegramCode(username, code) {
 
 app.use(cors());
 app.use(express.json());
+
+// Telegram webhook
+app.post('/tg-webhook', (req, res) => {
+  if (tgBot) tgBot.processUpdate(req.body);
+  res.sendStatus(200);
+});
+
+if (tgBot) {
+  tgBot.on('message', (msg) => {
+    const username = msg.from?.username;
+    if (username) {
+      tgUsers.set(username.toLowerCase(), msg.chat.id);
+      console.log(`TG: registered @${username} -> ${msg.chat.id}`);
+    }
+  });
+}
 
 // --- Auth middleware ---
 function auth(req, res, next) {
