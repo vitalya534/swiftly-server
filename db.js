@@ -1,8 +1,15 @@
-import Database from 'better-sqlite3';
+import initSqlJs from 'sql.js';
+import fs from 'fs';
 import path from 'path';
 
 const DB_PATH = path.resolve('messenger.db');
-const db = new Database(DB_PATH);
+const fileBuffer = fs.existsSync(DB_PATH) ? fs.readFileSync(DB_PATH) : null;
+const SQL = await initSqlJs();
+const db = new SQL.Database(fileBuffer);
+
+function save() {
+  fs.writeFileSync(DB_PATH, Buffer.from(db.export()));
+}
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS users (
@@ -38,5 +45,30 @@ db.exec(`
     created_at INTEGER DEFAULT (strftime('%s','now'))
   );
 `);
+save();
 
-export default db;
+function runQuery(sql, params = []) {
+  const stmt = db.prepare(sql);
+  stmt.bind(params);
+  const rows = [];
+  while (stmt.step()) rows.push(stmt.getAsObject());
+  stmt.free();
+  return rows;
+}
+
+function prepare(sql) {
+  return {
+    get(...params) {
+      return runQuery(sql, params)[0];
+    },
+    all(...params) {
+      return runQuery(sql, params);
+    },
+    run(...params) {
+      db.run(sql, params);
+      save();
+    }
+  };
+}
+
+export default { prepare, exec: (s) => { db.exec(s); save(); } };
